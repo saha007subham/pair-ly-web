@@ -79,7 +79,7 @@ const Navbar = () => {
                   <Link to="/connections">Friends</Link>
                 </li>
                 <li>
-                  <Link to="/requests">Connection Requests</Link>
+                  <Link to="/requests">Pending Requests</Link>
                 </li>
                 <li>
                   <Link onClick={handleLogut}>Logout</Link>
