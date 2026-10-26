@@ -2,27 +2,39 @@ import axios from "axios";
 import { BASE_URL } from "../utils/constants";
 import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
+import { useNavigate } from "react-router-dom";
 import { addFeed } from "../utils/feedSlice";
 import UserCard from "./UserCard";
+import { isRequestSucess } from "../utils/userSlice";
 
 const Feed = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const disPatch = useDispatch();
+  const navigate = useNavigate();
 
   const feed = useSelector((store) => store.feed);
+  const success = useSelector((store) => store.user?.isRequestSucess);
 
   const getFeed = async () => {
     try {
+      setLoading(true);
+      setError("");
+
       const res = await axios.get(BASE_URL + "/feed", {
         withCredentials: true,
       });
 
       disPatch(addFeed(res?.data?.users));
-
-      //   console.log(res?.data);
     } catch (err) {
+      if (err.response?.status === 401 || err.status == 401) {
+        navigate("/login");
+      } else {
+        setError(err.response?.data?.message || "Failed to load feed.");
+      }
       console.log(err);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -30,12 +42,58 @@ const Feed = () => {
     if (!feed) {
       getFeed();
     }
-    // console.log("Feed Data : ", feed);
   }, [feed]);
+
+  useEffect(() => {
+    if (!success) return;
+
+    let timer = setTimeout(() => {
+      disPatch(isRequestSucess(false));
+    }, 3000);
+
+    return () => clearTimeout(timer);
+  }, [success, disPatch]);
 
   return (
     <main className="min-h-screen bg-base-200/50 px-4 py-10 sm:px-6 lg:px-10">
       <div className="mx-auto max-w-7xl">
+        {success && (
+          <div className="toast toast-top toast-center z-[100] px-4 pt-4">
+            <div
+              role="status"
+              aria-live="polite"
+              className="alert alert-success flex w-full max-w-sm gap-3 rounded-xl border border-success/20 shadow-xl"
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6 shrink-0"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+                strokeWidth={2}
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M5 13l4 4L19 7"
+                />
+              </svg>
+
+              <span className="flex-1 text-sm font-medium">
+                Connection request sent successfully!
+              </span>
+
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm btn-circle"
+                aria-label="Dismiss notification"
+                onClick={() => disPatch(isRequestSucess(false))}
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
         {/* Header */}
         <div className="mb-10 flex flex-col gap-4 border-b border-base-300 pb-6 sm:flex-row sm:items-end sm:justify-between">
           <div>

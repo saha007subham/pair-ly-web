@@ -9,7 +9,7 @@ import { useEffect } from "react";
 const Body = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
-  const userData = useSelector((store) => store.user);
+  const userData = useSelector((store) => store.user?.user);
 
   const fetchUser = async () => {
     try {
@@ -19,7 +19,7 @@ const Body = () => {
 
       dispatch(addUser(res.data.userDetails));
     } catch (err) {
-      if (err.status == 401) {
+      if (err.response?.status === 401 || err.status == 401) {
         navigate("/login");
       }
 

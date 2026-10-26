@@ -8,7 +8,7 @@ const Navbar = () => {
   const navigate = useNavigate();
   const dispatch = useDispatch();
 
-  const user = useSelector((store) => store.user);
+  const user = useSelector((store) => store.user?.user);
 
   const handleLogut = async () => {
     try {

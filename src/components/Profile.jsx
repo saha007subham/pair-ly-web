@@ -18,7 +18,7 @@ import { BASE_URL } from "../utils/constants";
 import { addUser } from "../utils/userSlice";
 
 const Profile = () => {
-  const user = useSelector((store) => store.user);
+  const user = useSelector((store) => store.user?.user);
   const dispatch = useDispatch();
 
   const [firstName, setFirstName] = useState(user?.firstName ?? "");

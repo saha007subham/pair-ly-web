@@ -1,6 +1,55 @@
+import axios from "axios";
+import { BASE_URL } from "../utils/constants";
+import { useEffect, useState } from "react";
+import { useDispatch } from "react-redux";
+import { isRequestSucess } from "../utils/userSlice";
+import { removeFeedUser } from "../utils/feedSlice";
+
 const UserCard = ({ user }) => {
   //   console.log(user);
   const { firstName, lastName, photoURL, about } = user;
+  const [message, setMessage] = useState({
+    text: "",
+    type: "",
+  });
+
+  const dispatch = useDispatch();
+
+  const handleConnections = async (status) => {
+    setMessage({ text: "", type: "" });
+
+    try {
+      const res = await axios.post(
+        `${BASE_URL}/request/send/${status}/${user._id}`,
+        {},
+        { withCredentials: true },
+      );
+
+      if (res.status === 200 && status === "interested") {
+        setMessage({
+          text: "Connection request sent successfully!",
+          type: "success",
+        });
+
+        dispatch(isRequestSucess(true));
+        dispatch(removeFeedUser(user._id));
+      } else if (res.status === 200 && status === "ignored") {
+        setMessage({
+          text: "Profile ignored successfully.",
+          type: "success",
+        });
+        dispatch(removeFeedUser(user._id));
+      }
+    } catch (err) {
+      setMessage({
+        text:
+          err.response?.data?.message ||
+          "Something went wrong. Please try again.",
+        type: "error",
+      });
+    }
+  };
+
   return (
     <div className="card bg-base-100 w-full max-w-sm overflow-hidden rounded-2xl border border-base-300 shadow-md transition-all duration-300 hover:-translate-y-1 hover:shadow-xl">
       {/* Cover */}
@@ -67,7 +116,10 @@ const UserCard = ({ user }) => {
 
         {/* Actions */}
         <div className="card-actions mt-1 grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto] gap-3">
-          <button className="btn rounded-xl border-red-600 bg-red-600 text-white hover:border-red-700 hover:bg-red-700">
+          <button
+            onClick={() => handleConnections("ignored")}
+            className="btn rounded-xl border-red-600 bg-red-600 text-white hover:border-red-700 hover:bg-red-700"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
@@ -84,7 +136,10 @@ const UserCard = ({ user }) => {
             </svg>
             Ignore
           </button>
-          <button className="btn rounded-xl border-green-600 bg-green-600 text-white hover:border-green-700 hover:bg-green-700">
+          <button
+            onClick={() => handleConnections("interested")}
+            className="btn rounded-xl border-green-600 bg-green-600 text-white hover:border-green-700 hover:bg-green-700"
+          >
             <svg
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 24 24"
