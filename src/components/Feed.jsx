@@ -1,31 +1,63 @@
 import axios from "axios";
 import { BASE_URL } from "../utils/constants";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import { useNavigate } from "react-router-dom";
-import { addFeed } from "../utils/feedSlice";
+import { addFeed, appendFeed } from "../utils/feedSlice";
 import UserCard from "./UserCard";
 import { isRequestSucess } from "../utils/userSlice";
 
+const PAGE_LIMIT = 4; // Number of users fetched per page
+
 const Feed = () => {
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+
+  const isFetchingRef = useRef(false);
+  const observerTarget = useRef(null);
+
   const disPatch = useDispatch();
   const navigate = useNavigate();
 
   const feed = useSelector((store) => store.feed);
   const success = useSelector((store) => store.user?.isRequestSucess);
 
-  const getFeed = async () => {
-    try {
+  const fetchFeed = async (pageNum = 1, isInitial = false) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+
+    if (isInitial || pageNum === 1) {
       setLoading(true);
-      setError("");
+    } else {
+      setLoadingMore(true);
+    }
+    setError("");
 
-      const res = await axios.get(BASE_URL + "/feed", {
-        withCredentials: true,
-      });
+    try {
+      const res = await axios.get(
+        `${BASE_URL}/feed?page=${pageNum}&limit=${PAGE_LIMIT}`,
+        {
+          withCredentials: true,
+        },
+      );
 
-      disPatch(addFeed(res?.data?.users));
+      const newUsers = res?.data?.users || [];
+
+      if (isInitial || pageNum === 1) {
+        disPatch(addFeed(newUsers));
+      } else {
+        disPatch(appendFeed(newUsers));
+      }
+
+      // If backend returns fewer than PAGE_LIMIT, we've reached the end
+      if (newUsers.length < PAGE_LIMIT) {
+        setHasMore(false);
+      } else {
+        setHasMore(true);
+      }
     } catch (err) {
       if (err.response?.status === 401 || err.status == 401) {
         navigate("/login");
@@ -35,14 +67,62 @@ const Feed = () => {
       console.log(err);
     } finally {
       setLoading(false);
+      setLoadingMore(false);
+      isFetchingRef.current = false;
     }
+  };
+
+  const handleRefresh = () => {
+    setPage(1);
+    setHasMore(true);
+    fetchFeed(1, true);
   };
 
   useEffect(() => {
     if (!feed) {
-      getFeed();
+      fetchFeed(1, true);
     }
-  }, [feed]);
+  }, []);
+
+  const loadMore = useCallback(() => {
+    if (loading || loadingMore || !hasMore || isFetchingRef.current) return;
+
+    setPage((prevPage) => {
+      const nextPage = prevPage + 1;
+      fetchFeed(nextPage, false);
+      return nextPage;
+    });
+  }, [loading, loadingMore, hasMore]);
+
+  useEffect(() => {
+    const target = observerTarget.current;
+    if (!target) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (
+          entries[0].isIntersecting &&
+          hasMore &&
+          !loading &&
+          !loadingMore &&
+          !isFetchingRef.current
+        ) {
+          loadMore();
+        }
+      },
+      {
+        root: null,
+        rootMargin: "250px", // Trigger before user reaches the bottom
+        threshold: 0.1,
+      },
+    );
+
+    observer.observe(target);
+
+    return () => {
+      if (target) observer.unobserve(target);
+    };
+  }, [loadMore, hasMore, loading, loadingMore]);
 
   useEffect(() => {
     if (!success) return;
@@ -133,14 +213,14 @@ const Feed = () => {
               <div>
                 <p className="text-xl font-bold leading-tight">{feed.length}</p>
                 <p className="text-xs text-base-content/60">
-                  {feed.length === 1 ? "Person" : "People"}
+                  {feed.length === 1 ? "Person loaded" : "People loaded"}
                 </p>
               </div>
             </div>
           )}
         </div>
 
-        {/* Loading */}
+        {/* Initial Loading */}
         {loading && (
           <div className="flex min-h-80 flex-col items-center justify-center gap-5 rounded-3xl border border-base-300 bg-base-100/70">
             <span className="loading loading-spinner loading-lg text-primary" />
@@ -166,7 +246,7 @@ const Feed = () => {
             </p>
 
             <button
-              onClick={getFeed}
+              onClick={handleRefresh}
               className="btn btn-primary mt-6 rounded-xl px-6 shadow-md shadow-primary/20"
             >
               Try again
@@ -176,13 +256,40 @@ const Feed = () => {
 
         {/* User Grid */}
         {!loading && !error && Array.isArray(feed) && feed.length > 0 && (
-          <div className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
-            {feed.map((user) => (
-              <div key={user._id} className="min-w-0">
-                <UserCard user={user} />
+          <>
+            <div className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
+              {feed.map((user) => (
+                <div key={user._id} className="min-w-0">
+                  <UserCard user={user} />
+                </div>
+              ))}
+            </div>
+
+            {/* Sentinel for IntersectionObserver */}
+            <div ref={observerTarget} className="h-6 w-full" />
+
+            {/* Loading more spinner */}
+            {loadingMore && (
+              <div className="mt-8 flex justify-center py-6">
+                <div className="flex items-center gap-3 rounded-full bg-base-100 px-5 py-2.5 shadow-sm border border-base-300">
+                  <span className="loading loading-spinner loading-md text-primary" />
+                  <span className="text-sm font-medium text-base-content/70">
+                    Loading more people...
+                  </span>
+                </div>
               </div>
-            ))}
-          </div>
+            )}
+
+            {/* End of feed message */}
+            {!hasMore && !loadingMore && (
+              <div className="mt-12 text-center border-t border-base-300 pt-8 pb-4">
+                <div className="inline-flex items-center gap-2 rounded-full bg-base-100 border border-base-300 px-4 py-2 text-xs font-medium text-base-content/60 shadow-sm">
+                  <span>✨</span>
+                  <span>You've seen all available profiles for now</span>
+                </div>
+              </div>
+            )}
+          </>
         )}
 
         {/* Empty State */}
@@ -214,7 +321,7 @@ const Feed = () => {
             </p>
 
             <button
-              onClick={getFeed}
+              onClick={handleRefresh}
               className="btn btn-primary mt-6 rounded-xl px-6"
             >
               Refresh feed
@@ -222,7 +329,7 @@ const Feed = () => {
           </div>
         )}
 
-        {/* Initial state */}
+        {/* Initial state placeholder before feed array is initialized */}
         {!loading && !error && feed == null && (
           <div className="flex min-h-80 flex-col items-center justify-center gap-4 rounded-3xl border border-base-300 bg-base-100/70">
             <span className="loading loading-spinner loading-lg text-primary" />
