@@ -257,7 +257,7 @@ const Feed = () => {
         {/* User Grid */}
         {!loading && !error && Array.isArray(feed) && feed.length > 0 && (
           <>
-            <div className="grid grid-cols-1 items-stretch gap-5 sm:grid-cols-2 sm:gap-6 lg:grid-cols-3 xl:grid-cols-4">
+            <div className="grid grid-cols-1 items-stretch gap-6 md:grid-cols-2 xl:grid-cols-2">
               {feed.map((user) => (
                 <div key={user._id} className="min-w-0">
                   <UserCard user={user} />
