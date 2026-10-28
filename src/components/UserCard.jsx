@@ -77,12 +77,12 @@ const UserCard = ({ user }) => {
           <div className="absolute inset-0 bg-gradient-to-b from-black/20 via-transparent to-black/40" />
 
           {/* Interests Count */}
-          <div className="absolute left-3 top-3 sm:left-4 sm:top-4">
+          {/* <div className="absolute left-3 top-3 sm:left-4 sm:top-4">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-black/70 px-3 py-2 text-xs font-medium text-white shadow-lg backdrop-blur-md sm:text-sm">
               <span className="h-2 w-2 rounded-full bg-emerald-400" />
               {user.skills?.length || 0} interests
             </span>
-          </div>
+          </div> */}
         </div>
 
         {/* Profile Details */}

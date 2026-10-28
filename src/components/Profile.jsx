@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { useDispatch, useSelector } from "react-redux";
 import {
   UserRound,
-  Link as LinkIcon,
   FileText,
   Code2,
   Save,
@@ -12,10 +11,15 @@ import {
   AlertCircle,
   Lightbulb,
   Camera,
+  Upload,
+  X,
 } from "lucide-react";
 
 import { BASE_URL } from "../utils/constants";
 import { addUser } from "../utils/userSlice";
+
+const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5 MB
+const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp"];
 
 const Profile = () => {
   const user = useSelector((store) => store.user?.user);
@@ -24,6 +28,8 @@ const Profile = () => {
   const [firstName, setFirstName] = useState(user?.firstName ?? "");
   const [lastName, setLastName] = useState(user?.lastName ?? "");
   const [photoURL, setPhotoURL] = useState(user?.photoURL ?? "");
+  const [photoFile, setPhotoFile] = useState(null);
+  const [photoPreview, setPhotoPreview] = useState("");
   const [about, setAbout] = useState(user?.about ?? "");
   const [skills, setSkills] = useState(
     Array.isArray(user?.skills) ? user.skills.join(", ") : (user?.skills ?? ""),
@@ -48,6 +54,15 @@ const Profile = () => {
     );
   }, [user]);
 
+  // Clean up preview object URL on unmount or preview change.
+  useEffect(() => {
+    return () => {
+      if (photoPreview) {
+        URL.revokeObjectURL(photoPreview);
+      }
+    };
+  }, [photoPreview]);
+
   // Automatically dismiss notifications.
   useEffect(() => {
     if (!message.text) return;
@@ -59,6 +74,44 @@ const Profile = () => {
     return () => clearTimeout(timer);
   }, [message]);
 
+  const handlePhotoChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (!ALLOWED_IMAGE_TYPES.includes(file.type)) {
+      setMessage({
+        type: "error",
+        text: "Please select a JPG, PNG, or WEBP image.",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setMessage({
+        type: "error",
+        text: "Image size must be 5 MB or less.",
+      });
+      e.target.value = "";
+      return;
+    }
+
+    setMessage({ type: "", text: "" });
+    setPhotoFile(file);
+    setPhotoPreview(URL.createObjectURL(file));
+  };
+
+  const handleRemoveSelectedPhoto = () => {
+    if (photoPreview) {
+      URL.revokeObjectURL(photoPreview);
+    }
+    setPhotoFile(null);
+    setPhotoPreview("");
+
+    const input = document.getElementById("profile-photo-upload");
+    if (input) input.value = "";
+  };
+
   const handleUpdateProfile = async (e) => {
     e.preventDefault();
 
@@ -66,12 +119,38 @@ const Profile = () => {
     setMessage({ type: "", text: "" });
 
     try {
+      let finalPhotoURL = photoURL;
+
+      // 1. Upload photo to server if a new file was selected
+      if (photoFile) {
+        const formData = new FormData();
+        formData.append("photo", photoFile);
+
+        const uploadRes = await axios.post(
+          `${BASE_URL}/upload/profile-photo`,
+          formData,
+          {
+            headers: {
+              "Content-Type": "multipart/form-data",
+            },
+            withCredentials: true,
+          },
+        );
+
+        finalPhotoURL = uploadRes.data?.photoURL;
+
+        if (!finalPhotoURL) {
+          throw new Error("Photo upload did not return a valid URL.");
+        }
+      }
+
+      // 2. Update user profile
       const res = await axios.patch(
         `${BASE_URL}/profile/edit`,
         {
           firstName,
           lastName,
-          photoURL,
+          photoURL: finalPhotoURL,
           about,
           skills: skills
             .split(",")
@@ -84,7 +163,18 @@ const Profile = () => {
       console.log(res);
 
       if (res.status === 200) {
-        dispatch(addUser(res.data.data));
+        const updatedUser = res.data.data || res.data.user;
+        dispatch(addUser(updatedUser));
+
+        setPhotoURL(finalPhotoURL);
+        if (photoPreview) {
+          URL.revokeObjectURL(photoPreview);
+        }
+        setPhotoFile(null);
+        setPhotoPreview("");
+
+        const input = document.getElementById("profile-photo-upload");
+        if (input) input.value = "";
 
         setMessage({
           type: "success",
@@ -97,10 +187,12 @@ const Profile = () => {
         });
       }
     } catch (err) {
+      console.error("Profile update failed:", err);
       setMessage({
         type: "error",
         text:
           err.response?.data?.message ||
+          err.message ||
           "Failed to update profile. Please try again.",
       });
     } finally {
@@ -119,6 +211,15 @@ const Profile = () => {
         : (user?.skills ?? ""),
     );
 
+    if (photoPreview) {
+      URL.revokeObjectURL(photoPreview);
+    }
+    setPhotoFile(null);
+    setPhotoPreview("");
+
+    const input = document.getElementById("profile-photo-upload");
+    if (input) input.value = "";
+
     setMessage({ type: "", text: "" });
   };
 
@@ -136,6 +237,8 @@ const Profile = () => {
 
   const initials =
     `${firstName.charAt(0)}${lastName.charAt(0)}`.toUpperCase() || "U";
+
+  const displayPhoto = photoPreview || photoURL;
 
   return (
     <main className="min-h-screen bg-[#080b16] px-4 py-8 text-slate-100 sm:px-6 lg:py-12">
@@ -199,9 +302,9 @@ const Profile = () => {
               <div className="-mt-14 mb-4 flex justify-center">
                 <div className="relative">
                   <div className="rounded-full bg-gradient-to-br from-violet-500 via-indigo-500 to-blue-500 p-1 shadow-lg shadow-violet-900/30">
-                    {photoURL ? (
+                    {displayPhoto ? (
                       <img
-                        src={photoURL}
+                        src={displayPhoto}
                         alt={fullName}
                         className="h-28 w-28 rounded-full border-4 border-[#111625] bg-slate-900 object-cover"
                         onError={(e) => {
@@ -215,9 +318,13 @@ const Profile = () => {
                     )}
                   </div>
 
-                  <span className="absolute bottom-1 right-1 flex h-8 w-8 items-center justify-center rounded-full border-2 border-[#111625] bg-violet-600 text-white shadow-lg">
+                  <label
+                    htmlFor="profile-photo-upload"
+                    className="absolute bottom-1 right-1 flex h-8 w-8 cursor-pointer items-center justify-center rounded-full border-2 border-[#111625] bg-violet-600 text-white shadow-lg transition hover:bg-violet-500"
+                    title="Change profile photo"
+                  >
                     <Camera size={15} />
-                  </span>
+                  </label>
                 </div>
               </div>
 
@@ -362,31 +469,68 @@ const Profile = () => {
                 </div>
               </div>
 
-              {/* Profile Photo */}
+              {/* Profile Photo Uploader */}
               <div>
-                <label className={labelClass} htmlFor="photoURL">
-                  Profile Photo URL
-                </label>
+                <label className={labelClass}>Profile Photo</label>
 
-                <div className="relative">
-                  <LinkIcon
-                    size={18}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400"
-                  />
+                <div className="mt-2 flex flex-col items-center gap-5 rounded-2xl border border-dashed border-slate-700 bg-slate-900/40 p-5 sm:flex-row">
+                  <div className="relative flex h-24 w-24 shrink-0 items-center justify-center overflow-hidden rounded-2xl border-2 border-violet-500/30 bg-slate-950 shadow-md">
+                    {displayPhoto ? (
+                      <img
+                        src={displayPhoto}
+                        alt="Profile preview"
+                        className="h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="text-2xl font-bold text-violet-300">
+                        {initials}
+                      </div>
+                    )}
+                  </div>
 
-                  <input
-                    id="photoURL"
-                    type="url"
-                    className={`${inputClass} pl-11`}
-                    placeholder="https://example.com/photo.jpg"
-                    value={photoURL}
-                    onChange={(e) => setPhotoURL(e.target.value)}
-                  />
+                  <div className="min-w-0 flex-1 text-center sm:text-left">
+                    <p className="font-semibold text-white">
+                      {photoFile
+                        ? "New photo ready to upload"
+                        : "Upload your profile photo"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-400">
+                      JPG, PNG, or WEBP up to 5 MB.
+                    </p>
+
+                    <div className="mt-3 flex flex-wrap items-center justify-center gap-3 sm:justify-start">
+                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl border border-violet-500/30 bg-violet-500/10 px-4 py-2.5 text-xs font-semibold text-violet-300 transition hover:bg-violet-500/20">
+                        <Upload size={15} />
+                        {displayPhoto ? "Choose New Photo" : "Choose Photo"}
+
+                        <input
+                          id="profile-photo-upload"
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp"
+                          className="hidden"
+                          onChange={handlePhotoChange}
+                        />
+                      </label>
+
+                      {photoFile && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveSelectedPhoto}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-slate-700 px-3 py-2.5 text-xs font-medium text-slate-400 transition hover:border-rose-500/40 hover:bg-rose-500/10 hover:text-rose-300"
+                        >
+                          <X size={14} />
+                          Cancel Selection
+                        </button>
+                      )}
+                    </div>
+
+                    {photoFile && (
+                      <p className="mt-2 truncate text-xs font-medium text-emerald-400">
+                        ✓ {photoFile.name} ({(photoFile.size / 1024).toFixed(0)} KB)
+                      </p>
+                    )}
+                  </div>
                 </div>
-
-                <p className="mt-2 text-xs text-slate-500">
-                  Provide a publicly accessible image URL.
-                </p>
               </div>
 
               {/* About */}

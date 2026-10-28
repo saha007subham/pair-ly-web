@@ -10,7 +10,7 @@ import { isRequestSucess } from "../utils/userSlice";
 const PAGE_LIMIT = 4; // Number of users fetched per page
 
 const Feed = () => {
-  const [page, setPage] = useState(1);
+  const [, setPage] = useState(1);
   const [hasMore, setHasMore] = useState(true);
   const [loading, setLoading] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
